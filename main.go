@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"tempura-backend/handlers"
@@ -74,8 +75,12 @@ func main() {
 	}
 
 	// 6. Run Server
-	log.Println("Server running on port 8080")
-	if err := r.Run(":8080"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("Server running on port %s", port)
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Gagal menjalankan server: %v", err)
 	}
 }
