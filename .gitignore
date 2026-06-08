@@ -1,8 +1,18 @@
+# Environment Files
 .env
+*.env
+
+# Binaries / Executables
+tmp_server
+tempura-backend
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-bin/
-main
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo

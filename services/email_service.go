@@ -1,25 +1,90 @@
 package services
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"net/smtp"
+	"net/http"
 	"os"
 )
 
-func SendAccountEmail(toEmail, password string) error {
-	smtpHost := os.Getenv("SMTP_HOST")
-	smtpPort := os.Getenv("SMTP_PORT")
-	smtpEmail := os.Getenv("SMTP_EMAIL")
-	smtpPassword := os.Getenv("SMTP_PASSWORD")
+type BrevoSender struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
 
-	if smtpHost == "" || smtpEmail == "" || smtpPassword == "" {
-		// Log warning but don't fail, useful for local testing without SMTP configured
-		fmt.Println("Warning: SMTP configuration is missing. Cannot send email.")
+type BrevoRecipient struct {
+	Email string `json:"email"`
+}
+
+type BrevoEmailPayload struct {
+	Sender      BrevoSender      `json:"sender"`
+	To          []BrevoRecipient `json:"to"`
+	Subject     string           `json:"subject"`
+	HtmlContent string           `json:"htmlContent"`
+}
+
+func sendEmailViaBrevo(toEmail, subject, htmlBody string) error {
+	apiKey := os.Getenv("BREVO_API_KEY")
+	senderEmail := os.Getenv("BREVO_SENDER_EMAIL")
+	senderName := os.Getenv("BREVO_SENDER_NAME")
+
+	if senderName == "" {
+		senderName = "Tempura Admin"
+	}
+
+	payload := BrevoEmailPayload{
+		Sender: BrevoSender{
+			Name:  senderName,
+			Email: senderEmail,
+		},
+		To: []BrevoRecipient{
+			{
+				Email: toEmail,
+			},
+		},
+		Subject:     subject,
+		HtmlContent: htmlBody,
+	}
+
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal email payload: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", "https://api.brevo.com/v3/smtp/email", bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create http request: %v", err)
+	}
+
+	req.Header.Set("accept", "application/json")
+	req.Header.Set("api-key", apiKey)
+	req.Header.Set("content-type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send http request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("brevo api returned non-success status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func SendAccountEmail(toEmail, password string) error {
+	apiKey := os.Getenv("BREVO_API_KEY")
+	senderEmail := os.Getenv("BREVO_SENDER_EMAIL")
+
+	if apiKey == "" || senderEmail == "" {
+		// Log warning but don't fail, useful for local testing without Brevo configured
+		fmt.Println("Warning: Brevo configuration is missing. Cannot send email.")
 		fmt.Printf("Generated Account: Email=%s, Password=%s\n", toEmail, password)
 		return nil
 	}
-
-	auth := smtp.PlainAuth("", smtpEmail, smtpPassword, smtpHost)
 
 	subject := "Informasi Akun Pegawai Tempura"
 	htmlBody := fmt.Sprintf(`
@@ -76,39 +141,19 @@ func SendAccountEmail(toEmail, password string) error {
 </body>
 </html>`, toEmail, password)
 
-	headers := "MIME-version: 1.0;\r\n" +
-		"Content-Type: text/html; charset=\"UTF-8\";\r\n" +
-		"From: Tempura Admin <" + smtpEmail + ">\r\n" +
-		"To: " + toEmail + "\r\n" +
-		"Subject: " + subject + "\r\n\r\n"
-
-	message := []byte(headers + htmlBody)
-
-	addr := smtpHost + ":" + smtpPort
-	err := smtp.SendMail(addr, auth, smtpEmail, []string{toEmail}, message)
-	if err != nil {
-		return fmt.Errorf("failed to send email: %v", err)
-	}
-
-	return nil
+	return sendEmailViaBrevo(toEmail, subject, htmlBody)
 }
 
 func SendOTPEmail(toEmail, otpCode string) error {
-	smtpHost := os.Getenv("SMTP_HOST")
-	smtpPort := os.Getenv("SMTP_PORT")
-	smtpEmail := os.Getenv("SMTP_EMAIL")
-	smtpPassword := os.Getenv("SMTP_PASSWORD")
+	apiKey := os.Getenv("BREVO_API_KEY")
+	senderEmail := os.Getenv("BREVO_SENDER_EMAIL")
 
-	if smtpHost == "" || smtpEmail == "" || smtpPassword == "" {
+	if apiKey == "" || senderEmail == "" {
 		fmt.Printf("SIMULASI EMAIL OTP: Kode OTP untuk %s: %s\n", toEmail, otpCode)
 		return nil
 	}
 
-	auth := smtp.PlainAuth("", smtpEmail, smtpPassword, smtpHost)
-
 	subject := "Kode Verifikasi Reset Password - Tempura"
-	
-	// Format HTML body exactly like the beautiful design in the screenshot
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -160,19 +205,5 @@ func SendOTPEmail(toEmail, otpCode string) error {
 </body>
 </html>`, otpCode)
 
-	headers := "MIME-version: 1.0;\r\n" +
-		"Content-Type: text/html; charset=\"UTF-8\";\r\n" +
-		"From: Tempura Auth <" + smtpEmail + ">\r\n" +
-		"To: " + toEmail + "\r\n" +
-		"Subject: " + subject + "\r\n\r\n"
-
-	message := []byte(headers + htmlBody)
-
-	addr := smtpHost + ":" + smtpPort
-	err := smtp.SendMail(addr, auth, smtpEmail, []string{toEmail}, message)
-	if err != nil {
-		return fmt.Errorf("failed to send OTP email: %v", err)
-	}
-
-	return nil
+	return sendEmailViaBrevo(toEmail, subject, htmlBody)
 }
