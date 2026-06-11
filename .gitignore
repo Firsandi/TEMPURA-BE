@@ -16,3 +16,6 @@ tempura-backend
 .vscode/
 *.swp
 *.swo
+
+# Go build main binary
+main
