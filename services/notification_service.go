@@ -125,3 +125,39 @@ func SendHarvestNotification(batchName string) {
 
 	log.Printf("FCM: Harvest notification sent successfully. Response: %s", response)
 }
+
+// SendAlertNotification sends a push notification for system alerts (Temp, Hum, Offline)
+func SendAlertNotification(title, body, alertType string) {
+	if fcmClient == nil {
+		log.Printf("FCM: Client not initialized. Skipping alert: %s", title)
+		return
+	}
+
+	ctx := context.Background()
+
+	message := &messaging.Message{
+		Topic: "tempura_harvest", // Subscribing clients use tempura_harvest
+		Notification: &messaging.Notification{
+			Title: title,
+			Body:  body,
+		},
+		Data: map[string]string{
+			"type": alertType,
+		},
+		Android: &messaging.AndroidConfig{
+			Priority: "high",
+			Notification: &messaging.AndroidNotification{
+				Sound:    "default",
+				Priority: messaging.PriorityHigh,
+			},
+		},
+	}
+
+	response, err := fcmClient.Send(ctx, message)
+	if err != nil {
+		log.Printf("FCM: Failed to send alert notification: %v", err)
+		return
+	}
+
+	log.Printf("FCM: Alert notification sent successfully. Response: %s", response)
+}

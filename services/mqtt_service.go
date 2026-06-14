@@ -11,6 +11,12 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
+var (
+	lastTempAlertTime time.Time
+	lastHumAlertTime  time.Time
+	alertCooldown     = 30 * time.Minute
+)
+
 type SensorPayload struct {
 	Temp      float64 `json:"temp"`
 	Hum       float64 `json:"hum"`
@@ -75,6 +81,31 @@ func handleSensorData(client mqtt.Client, msg mqtt.Message) {
 			fmt.Printf("Saved sensor data for Batch #%d Run #%v\n", *batchID, historyID)
 		} else {
 			fmt.Printf("Saved global heartbeat data\n")
+		}
+	}
+
+
+	// 2.5 Check Alerts
+	var settings models.SystemSetting
+	if err := config.DB.First(&settings).Error; err == nil {
+		now := time.Now()
+		// Temp Alert
+		if payload.Temp < settings.TargetTemp || payload.Temp > settings.MaxTemp {
+			if now.Sub(lastTempAlertTime) > alertCooldown {
+				title := "Peringatan Suhu Abnormal!"
+				body := fmt.Sprintf("Suhu saat ini %.1f C (Batas: %.1f C - %.1f C)", payload.Temp, settings.TargetTemp, settings.MaxTemp)
+				go SendAlertNotification(title, body, "temperature_alert")
+				lastTempAlertTime = now
+			}
+		}
+		// Hum Alert
+		if payload.Hum < settings.MinHumidity || payload.Hum > settings.MaxHumidity {
+			if now.Sub(lastHumAlertTime) > alertCooldown {
+				title := "Peringatan Kelembaban Abnormal!"
+				body := fmt.Sprintf("Kelembaban saat ini %.1f%% (Batas: %.1f%% - %.1f%%)", payload.Hum, settings.MinHumidity, settings.MaxHumidity)
+				go SendAlertNotification(title, body, "humidity_alert")
+				lastHumAlertTime = now
+			}
 		}
 	}
 

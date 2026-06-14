@@ -8,8 +8,35 @@ import (
 	"github.com/gin-gonic/gin"
 	"tempura-backend/handlers"
 	"tempura-backend/config"
+	"tempura-backend/models"
 	"tempura-backend/services"
+	"time"
 )
+
+func monitorDeviceStatus() {
+	var lastOfflineAlertTime time.Time
+	alertCooldown := 30 * time.Minute
+
+	for {
+		time.Sleep(5 * time.Minute)
+
+		var latestSensor models.SensorData
+		if err := config.DB.Order("timestamp desc").First(&latestSensor).Error; err == nil {
+			now := time.Now()
+			// If latest sensor data is older than 5 minutes
+			if now.Sub(latestSensor.Timestamp) > 5*time.Minute {
+				if now.Sub(lastOfflineAlertTime) > alertCooldown {
+					services.SendAlertNotification(
+						"Perangkat Offline!",
+						"Tidak ada data masuk dari perangkat selama lebih dari 5 menit.",
+						"device_offline",
+					)
+					lastOfflineAlertTime = now
+				}
+			}
+		}
+	}
+}
 
 func main() {
 	// 1. Initialize Database (Supabase)
@@ -24,6 +51,7 @@ func main() {
 	}
 
 	services.StartMQTTSubscription()
+	go monitorDeviceStatus()
 
 	// 3. Setup Router
 	r := gin.Default()
