@@ -17,6 +17,12 @@ func main() {
 
 	// 2. Initialize MQTT
 	config.InitMQTT()
+
+	// 3. Initialize Firebase Admin SDK (for FCM push notifications)
+	if err := services.InitFirebase(); err != nil {
+		log.Printf("Warning: Firebase init failed, FCM notifications disabled: %v", err)
+	}
+
 	services.StartMQTTSubscription()
 
 	// 3. Setup Router

@@ -41,13 +41,13 @@ func ConnectDatabase() {
 	rawSQL := []string{
 		`CREATE TABLE IF NOT EXISTS "roles" ("role_id" bigserial PRIMARY KEY, "role_name" text)`,
 		`CREATE TABLE IF NOT EXISTS "users" ("user_id" bigserial PRIMARY KEY, "email" text UNIQUE NOT NULL, "password" text NOT NULL, "fullname" text, "role_id" bigint, "is_active" boolean DEFAULT true, "is_deleted" boolean DEFAULT false, "created_at" timestamptz, "updated_at" timestamptz)`,
-		`CREATE TABLE IF NOT EXISTS "batch_produksis" ("batch_id" bigserial PRIMARY KEY, "nama_batch" text, "tanggal_produksi" timestamptz, "status_batch" text DEFAULT 'draft', "jumlah_bungkus" bigint, "jumlah_kedelai" numeric, "jumlah_ragi" bigint, "created_by" bigint, "created_at" timestamptz, "is_deleted" boolean DEFAULT false)`,
+		`CREATE TABLE IF NOT EXISTS "batch_produksis" ("batch_id" bigserial PRIMARY KEY, "nama_batch" text, "tanggal_produksi" timestamptz, "status_batch" text DEFAULT 'draft', "jumlah_bungkus" bigint, "jumlah_kedelai" numeric, "jumlah_ragi" bigint, "created_by" bigint, "created_at" timestamptz, "end_timestamp" timestamptz, "is_deleted" boolean DEFAULT false)`,
 		`CREATE TABLE IF NOT EXISTS "production_histories" ("history_id" bigserial PRIMARY KEY, "batch_id" bigint, "run_number" bigint, "start_time" timestamptz, "end_time" timestamptz, "status" text, "started_by" bigint, "stopped_by" bigint)`,
-		`CREATE TABLE IF NOT EXISTS "sensor_data" ("sensor_data_id" bigserial PRIMARY KEY, "history_id" bigint, "suhu" numeric, "kelembaban" numeric, "soil_moisture" bigint, "relay_fan" boolean, "relay_pump" boolean, "health" text, "timestamp" timestamptz)`,
+		`CREATE TABLE IF NOT EXISTS "sensor_data" ("sensor_data_id" bigserial PRIMARY KEY, "history_id" bigint, "suhu" numeric, "kelembaban" numeric, "soil_moisture" bigint, "relay_fan" boolean, "relay_pump" boolean, "relay_bulb" boolean, "health" text, "timestamp" timestamptz)`,
 		`CREATE TABLE IF NOT EXISTS "devices" ("device_id" bigserial PRIMARY KEY, "device_name" text)`,
 		`CREATE TABLE IF NOT EXISTS "device_statuses" ("status_id" bigserial PRIMARY KEY, "device_id" bigint, "status" boolean, "timestamp" timestamptz)`,
 		`CREATE TABLE IF NOT EXISTS "device_control_logs" ("log_id" bigserial PRIMARY KEY, "device_id" bigint, "user_id" bigint, "action" text, "timestamp" timestamptz)`,
-		`CREATE TABLE IF NOT EXISTS "system_settings" ("id" bigserial PRIMARY KEY, "mode" text DEFAULT 'manual', "target_temp" numeric DEFAULT 30, "target_moisture" bigint DEFAULT 700, "updated_at" timestamptz)`,
+		`CREATE TABLE IF NOT EXISTS "system_settings" ("id" bigserial PRIMARY KEY, "mode" text DEFAULT 'manual', "target_temp" numeric DEFAULT 30, "max_temp" numeric DEFAULT 37, "min_humidity" numeric DEFAULT 60, "max_humidity" numeric DEFAULT 70, "target_moisture" bigint DEFAULT 30, "updated_at" timestamptz)`,
 		`CREATE TABLE IF NOT EXISTS "password_reset_requests" ("request_id" bigserial PRIMARY KEY, "email" text, "token" text, "expires_at" timestamptz, "is_used" boolean DEFAULT false, "created_at" timestamptz, "updated_at" timestamptz)`,
 	}
 	for _, sql := range rawSQL {

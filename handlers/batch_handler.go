@@ -78,8 +78,11 @@ func StartBatch(c *gin.Context) {
 	}
 	config.DB.Create(&history)
 
-	// 5. Update batch status to active
-	config.DB.Model(&batch).Update("status_batch", "active")
+	// 5. Update batch status to active and reset end_timestamp
+	config.DB.Model(&batch).Updates(map[string]interface{}{
+		"status_batch":  "active",
+		"end_timestamp": nil,
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
@@ -177,8 +180,11 @@ func StopBatch(c *gin.Context) {
 func CompleteBatch(batchID interface{}, status string, stoppedBy *uint) error {
 	now := time.Now()
 	
-	// 1. Update Batch status
-	if err := config.DB.Model(&models.BatchProduksi{}).Where("batch_id = ?", batchID).Update("status_batch", "completed").Error; err != nil {
+	// 1. Update Batch status and end_timestamp
+	if err := config.DB.Model(&models.BatchProduksi{}).Where("batch_id = ?", batchID).Updates(map[string]interface{}{
+		"status_batch":  "completed",
+		"end_timestamp": &now,
+	}).Error; err != nil {
 		return fmt.Errorf("gagal update status batch: %v", err)
 	}
 

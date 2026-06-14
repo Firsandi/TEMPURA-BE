@@ -44,20 +44,26 @@ func GetDashboardData(c *gin.Context) {
 		Select("AVG(suhu) as avg_temp, AVG(kelembaban) as avg_hum").
 		Scan(&stats)
 
-	// 5. Calculate Fermentation Status based on Soil Moisture
+	// 5. Calculate Fermentation Status based on Soil Moisture (percentage 0-100%)
+	// Soil moisture is ONLY used for maturity display, NOT for actuator control.
 	fermentationStatus := "Fase Awal"
-	if latestData.SoilMoisture > 0 {
-		if latestData.SoilMoisture > 800 {
-			fermentationStatus = "Baru Mulai"
-		} else if latestData.SoilMoisture > 500 {
-			fermentationStatus = "Setengah Matang"
-		} else if latestData.SoilMoisture > 200 {
-			fermentationStatus = "Hampir Matang"
+	currentPhase := "awal"
+	if latestData.SoilMoisture > 0 || latestData.SensorDataID != 0 {
+		soil := latestData.SoilMoisture
+		if soil >= 80 {
+			fermentationStatus = "Fase Awal"
+			currentPhase = "awal"
+		} else if soil >= 30 {
+			fermentationStatus = "Fase Aktif"
+			currentPhase = "aktif"
 		} else {
-			fermentationStatus = "Siap Panen"
+			fermentationStatus = "Fase Matang"
+			currentPhase = "matang"
 		}
-	} else if latestData.SensorDataID == 0 {
+	}
+	if latestData.SensorDataID == 0 {
 		fermentationStatus = "Menunggu Sensor..."
+		currentPhase = "waiting"
 	}
 
 	// 6. Get sensor history (for chart)
@@ -72,6 +78,12 @@ func GetDashboardData(c *gin.Context) {
 	var runs []models.ProductionHistory
 	config.DB.Where("batch_id = ?", batch.BatchID).Order("run_number desc").Find(&runs)
 
+	// 8. Get system settings for UI display
+	var settings models.SystemSetting
+	if err := config.DB.First(&settings).Error; err != nil {
+		settings = models.SystemSetting{Mode: "manual", TargetTemp: 30.0, MaxTemp: 37.0, MinHumidity: 60.0, MaxHumidity: 70.0, TargetMoisture: 30}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"data": gin.H{
@@ -79,8 +91,10 @@ func GetDashboardData(c *gin.Context) {
 			"latest_sensor":       globalLatest,
 			"stats":               stats,
 			"fermentation_status": fermentationStatus,
+			"current_phase":       currentPhase,
 			"sensor_history":      history,
 			"production_runs":     runs,
+			"settings":            settings,
 		},
 	})
 }
@@ -88,7 +102,7 @@ func GetDashboardData(c *gin.Context) {
 
 func ControlDevice(c *gin.Context) {
 	var input struct {
-		Device string `json:"device"` // fan, pump, etc
+		Device string `json:"device"` // fan, mist, bulb
 		Action string `json:"action"` // on, off
 	}
 
@@ -99,7 +113,7 @@ func ControlDevice(c *gin.Context) {
 
 	// Publish to MQTT
 	topic := "tempura/device/control"
-	// Sesuai dengan format di ESP32: fan_on, fan_off, pump_on, pump_off
+	// Sesuai dengan format di ESP32: fan_on, fan_off, mist_on, mist_off, bulb_on, bulb_off
 	payload := input.Device + "_" + input.Action
 	
 	token := config.MQTTClient.Publish(topic, 1, false, payload)
@@ -120,7 +134,14 @@ func GetSettings(c *gin.Context) {
 	var settings models.SystemSetting
 	if err := config.DB.First(&settings).Error; err != nil {
 		// Create default if not exists
-		settings = models.SystemSetting{Mode: "manual", TargetTemp: 30.0, TargetMoisture: 700}
+		settings = models.SystemSetting{
+			Mode:           "manual",
+			TargetTemp:     30.0,
+			MaxTemp:        37.0,
+			MinHumidity:    60.0,
+			MaxHumidity:    70.0,
+			TargetMoisture: 30,
+		}
 		config.DB.Create(&settings)
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": settings})

@@ -14,6 +14,7 @@ type BatchProduksi struct {
 	JumlahRagi      int        `json:"jumlah_ragi"`
 	CreatedBy       uint       `json:"created_by"`
 	CreatedAt       time.Time  `json:"created_at"`
+	EndTimestamp    *time.Time `json:"end_timestamp"`
 	IsDeleted       bool       `gorm:"default:false" json:"is_deleted"`
 }
 
@@ -23,7 +24,7 @@ type ProductionHistory struct {
 	RunNumber    int        `json:"run_number"`
 	StartTime    time.Time  `json:"start_time"`
 	EndTime      *time.Time `json:"end_time"`
-	Status       string     `json:"status"` // Berhasil Fermentasi (normal), Fermentasi Dihentikan (dihentikan paksa)
+	Status       string     `json:"status"` // Berjalan, Matang Sempurna (otomatis), Fermentasi Dihentikan (dihentikan paksa)
 	StartedBy    *uint      `json:"started_by"`
 	StoppedBy    *uint      `json:"stopped_by"`
 }
@@ -62,9 +63,12 @@ type DeviceControlLog struct {
 }
 
 type SystemSetting struct {
-	ID              uint    `gorm:"primaryKey" json:"id"`
-	Mode            string  `gorm:"default:manual" json:"mode"` // manual, auto
-	TargetTemp      float64 `gorm:"default:30.0" json:"target_temp"`
-	TargetMoisture  int     `gorm:"default:700" json:"target_moisture"`
-	UpdatedAt       time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	Mode           string    `gorm:"default:manual" json:"mode"` // manual, auto
+	TargetTemp     float64   `gorm:"default:30.0" json:"target_temp"`       // Batas bawah suhu optimal (°C)
+	MaxTemp        float64   `gorm:"default:37.0" json:"max_temp"`          // Batas atas suhu optimal (°C)
+	MinHumidity    float64   `gorm:"default:60.0" json:"min_humidity"`      // Batas bawah kelembaban (%)
+	MaxHumidity    float64   `gorm:"default:70.0" json:"max_humidity"`      // Batas atas kelembaban (%)
+	TargetMoisture int       `gorm:"default:30" json:"target_moisture"`     // Threshold soil moisture (%)
+	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
