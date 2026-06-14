@@ -2,9 +2,11 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	firebase "firebase.google.com/go/v4"
@@ -23,16 +25,47 @@ var (
 func InitFirebase() error {
 	fcmClientOnce.Do(func() {
 		ctx := context.Background()
-
-		// Check for service account credentials
-		credPath := os.Getenv("FIREBASE_CREDENTIALS_PATH")
 		var app *firebase.App
 
-		if credPath != "" {
-			opt := option.WithCredentialsFile(credPath)
-			app, fcmInitErr = firebase.NewApp(ctx, nil, opt)
-		} else {
-			// Try to use GOOGLE_APPLICATION_CREDENTIALS env or default credentials
+		// 1. Check for Base64 encoded credentials (often used in Railway env vars)
+		if credsBase64 := os.Getenv("FIREBASE_CREDENTIALS_BASE64"); credsBase64 != "" {
+			credsBase64 = strings.TrimRight(credsBase64, "% \r\n")
+			decoded, err := base64.StdEncoding.DecodeString(credsBase64)
+			if err != nil {
+				log.Printf("Warning: Failed to decode FIREBASE_CREDENTIALS_BASE64: %v", err)
+			} else {
+				opt := option.WithCredentialsJSON(decoded)
+				app, fcmInitErr = firebase.NewApp(ctx, nil, opt)
+				if fcmInitErr == nil {
+					log.Println("Firebase initialized using FIREBASE_CREDENTIALS_BASE64")
+				}
+			}
+		}
+
+		// 2. Fallback to raw JSON credentials
+		if app == nil && fcmInitErr == nil {
+			if credsJSON := os.Getenv("FIREBASE_CREDENTIALS_JSON"); credsJSON != "" {
+				opt := option.WithCredentialsJSON([]byte(credsJSON))
+				app, fcmInitErr = firebase.NewApp(ctx, nil, opt)
+				if fcmInitErr == nil {
+					log.Println("Firebase initialized using FIREBASE_CREDENTIALS_JSON")
+				}
+			}
+		}
+
+		// 3. Fallback to path config
+		if app == nil && fcmInitErr == nil {
+			if credPath := os.Getenv("FIREBASE_CREDENTIALS_PATH"); credPath != "" {
+				opt := option.WithCredentialsFile(credPath)
+				app, fcmInitErr = firebase.NewApp(ctx, nil, opt)
+				if fcmInitErr == nil {
+					log.Println("Firebase initialized using FIREBASE_CREDENTIALS_PATH")
+				}
+			}
+		}
+
+		// 4. Default Credentials fallback
+		if app == nil && fcmInitErr == nil {
 			app, fcmInitErr = firebase.NewApp(ctx, nil)
 		}
 
