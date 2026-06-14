@@ -18,8 +18,6 @@ func monitorDeviceStatus() {
 	alertCooldown := 30 * time.Minute
 
 	for {
-		time.Sleep(5 * time.Minute)
-
 		var latestSensor models.SensorData
 		if err := config.DB.Order("timestamp desc").First(&latestSensor).Error; err == nil {
 			now := time.Now()
@@ -35,6 +33,9 @@ func monitorDeviceStatus() {
 				}
 			}
 		}
+		
+		// Tidur 1 menit sebelum mengecek lagi
+		time.Sleep(1 * time.Minute)
 	}
 }
 
