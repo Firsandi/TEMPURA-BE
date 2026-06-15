@@ -29,10 +29,21 @@ type SensorPayload struct {
 }
 
 func StartMQTTSubscription() {
-	topic := "tempura/sensor/data"
-	token := config.MQTTClient.Subscribe(topic, 1, handleSensorData)
-	token.Wait()
-	fmt.Printf("Subscribed to topic: %s\n", topic)
+	config.OnConnectCallback = func(c mqtt.Client) {
+		topic := "tempura/sensor/data"
+		token := c.Subscribe(topic, 1, handleSensorData)
+		token.Wait()
+		if token.Error() != nil {
+			log.Printf("Gagal subscribe ke topik %s: %v", topic, token.Error())
+		} else {
+			fmt.Printf("Berhasil subscribe ke topik: %s\n", topic)
+		}
+	}
+
+	// Jika sudah terkoneksi saat startup, panggil callback langsung
+	if config.MQTTClient != nil && config.MQTTClient.IsConnected() {
+		config.OnConnectCallback(config.MQTTClient)
+	}
 }
 
 func handleSensorData(client mqtt.Client, msg mqtt.Message) {
