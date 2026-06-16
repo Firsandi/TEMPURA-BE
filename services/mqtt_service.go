@@ -92,6 +92,36 @@ func handleSensorData(client mqtt.Client, msg mqtt.Message) {
 		}
 	}
 
+	// 2.3 Auto-complete batch if soil moisture >= 85%
+	if batchID != nil && payload.Soil >= 85 {
+		now := time.Now()
+		// 1. Update Batch status and end_timestamp
+		config.DB.Model(&models.BatchProduksi{}).Where("batch_id = ?", *batchID).Updates(map[string]interface{}{
+			"status_batch":  "completed",
+			"end_timestamp": &now,
+		})
+		// 2. Update Production History
+		config.DB.Model(&models.ProductionHistory{}).
+			Where("batch_id = ? AND end_time IS NULL", *batchID).
+			Updates(map[string]interface{}{
+				"end_time": &now,
+				"status":   "Matang Sempurna (otomatis)",
+			})
+		fmt.Printf("Batch #%d completed automatically (Soil Moisture: %d%% >= 85%%)\n", *batchID, payload.Soil)
+
+		// Send Push Notification
+		go SendHarvestNotification(batch.NamaBatch)
+
+		// Turn off all actuators
+		topic := "tempura/device/control"
+		publishControl(client, topic, "bulb_off")
+		publishControl(client, topic, "fan_off")
+		publishControl(client, topic, "mist_off")
+
+		// Set batchID to nil so auto-control doesn't run for this reading
+		batchID = nil
+	}
+
 
 	// 2.5 Check Alerts
 	var settings models.SystemSetting

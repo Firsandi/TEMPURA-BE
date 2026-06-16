@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"tempura-backend/config"
 	"tempura-backend/models"
+	"tempura-backend/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -198,6 +199,12 @@ func StopBatch(c *gin.Context) {
 func CompleteBatch(batchID interface{}, status string, stoppedBy *uint) error {
 	now := time.Now()
 	
+	// Get batch name before completing to send notification
+	var batch models.BatchProduksi
+	if err := config.DB.First(&batch, batchID).Error; err == nil {
+		go services.SendHarvestNotification(batch.NamaBatch)
+	}
+
 	// 1. Update Batch status and end_timestamp
 	if err := config.DB.Model(&models.BatchProduksi{}).Where("batch_id = ?", batchID).Updates(map[string]interface{}{
 		"status_batch":  "completed",
