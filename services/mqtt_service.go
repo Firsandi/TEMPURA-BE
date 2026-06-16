@@ -176,11 +176,16 @@ func runAutoControl(client mqtt.Client, payload SensorPayload, batch models.Batc
 
 }
 
-// publishControl publishes a control command to MQTT.
+// publishControl publishes a control command to MQTT in a non-blocking way.
 func publishControl(client mqtt.Client, topic, command string) {
-	token := client.Publish(topic, 1, false, command)
-	token.Wait()
-	if token.Error() != nil {
-		log.Printf("Error publishing control command '%s': %v", command, token.Error())
-	}
+	go func() {
+		token := client.Publish(topic, 1, false, command)
+		if token.WaitTimeout(5 * time.Second) {
+			if token.Error() != nil {
+				log.Printf("Error publishing control command '%s': %v", command, token.Error())
+			}
+		} else {
+			log.Printf("Timeout publishing control command '%s' to MQTT", command)
+		}
+	}()
 }

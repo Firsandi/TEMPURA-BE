@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 	"tempura-backend/config"
 	"tempura-backend/models"
 
@@ -117,7 +118,10 @@ func ControlDevice(c *gin.Context) {
 	payload := input.Device + "_" + input.Action
 	
 	token := config.MQTTClient.Publish(topic, 1, false, payload)
-	token.Wait()
+	if !token.WaitTimeout(5 * time.Second) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Timeout mengirim perintah ke alat"})
+		return
+	}
 
 	if token.Error() != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengirim perintah ke alat"})
