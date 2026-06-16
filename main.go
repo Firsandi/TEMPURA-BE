@@ -43,15 +43,17 @@ func main() {
 	// 1. Initialize Database (Supabase)
 	config.ConnectDatabase()
 
-	// 2. Initialize MQTT
+	// 2. Register MQTT callback first so it is ready when connected
+	services.RegisterMQTTCallback()
+
+	// 3. Initialize MQTT (which will automatically call the registered callback on connect)
 	config.InitMQTT()
 
-	// 3. Initialize Firebase Admin SDK (for FCM push notifications)
+	// 4. Initialize Firebase Admin SDK (for FCM push notifications)
 	if err := services.InitFirebase(); err != nil {
 		log.Printf("Warning: Firebase init failed, FCM notifications disabled: %v", err)
 	}
 
-	services.StartMQTTSubscription()
 	go monitorDeviceStatus()
 
 	// 3. Setup Router

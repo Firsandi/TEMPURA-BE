@@ -28,7 +28,7 @@ type SensorPayload struct {
 	Health    string  `json:"health"`
 }
 
-func StartMQTTSubscription() {
+func RegisterMQTTCallback() {
 	config.OnConnectCallback = func(c mqtt.Client) {
 		topic := "tempura/sensor/data"
 		token := c.Subscribe(topic, 1, handleSensorData)
@@ -38,11 +38,6 @@ func StartMQTTSubscription() {
 		} else {
 			fmt.Printf("Berhasil subscribe ke topik: %s\n", topic)
 		}
-	}
-
-	// Jika sudah terkoneksi saat startup, panggil callback langsung
-	if config.MQTTClient != nil && config.MQTTClient.IsConnected() {
-		config.OnConnectCallback(config.MQTTClient)
 	}
 }
 
