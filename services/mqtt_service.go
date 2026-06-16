@@ -145,16 +145,7 @@ func runAutoControl(client mqtt.Client, payload SensorPayload, batch models.Batc
 
 	topic := "tempura/device/control"
 
-	// --- FAIL-SAFE: Tempe matang (soil < 30%) → matikan semua ---
-	if payload.Soil < settings.TargetMoisture {
-		publishControl(client, topic, "fan_off")
-		publishControl(client, topic, "mist_off")
-		publishControl(client, topic, "bulb_off")
-		log.Printf("AUTO-CONTROL FAIL-SAFE: Soil %d%% < %d%% → Semua alat OFF (tempe matang)", payload.Soil, settings.TargetMoisture)
-		// Cek auto-harvest
-		checkAutoHarvest(client, payload, batch, topic)
-		return
-	}
+
 
 	// --- KONTROL LAMPU (Fungsi Ganda: nyala jika dingin ATAU terlalu lembab) ---
 	if payload.Temp < settings.TargetTemp || payload.Hum > settings.MaxHumidity {
@@ -183,63 +174,6 @@ func runAutoControl(client mqtt.Client, payload SensorPayload, batch models.Batc
 		log.Printf("AUTO-CONTROL: Mist Maker OFF (kelembaban cukup)")
 	}
 
-	// --- AUTO-HARVEST: Soil < threshold konstan selama 30 menit ---
-	checkAutoHarvest(client, payload, batch, topic)
-}
-
-// checkAutoHarvest checks if soil moisture has been below 30% consistently for 30 minutes.
-func checkAutoHarvest(client mqtt.Client, payload SensorPayload, batch models.BatchProduksi, topic string) {
-	if payload.Soil >= 30 {
-		return // Belum fase matang
-	}
-
-	// Query data sensor terakhir dalam 30 menit, cek apakah semua soil < 30%
-	thirtyMinAgo := time.Now().Add(-30 * time.Minute)
-	var count int64
-	config.DB.Model(&models.SensorData{}).
-		Where("timestamp >= ? AND soil_moisture < 30", thirtyMinAgo).
-		Count(&count)
-
-	// Minimal 6 data points dalam 30 menit (interval 5 detik = ~360 data, tapi kita toleran minimal 6)
-	if count < 6 {
-		log.Printf("AUTO-HARVEST: Soil %d%% < 30%%, tapi baru %d data point (butuh min 6). Menunggu...", payload.Soil, count)
-		return
-	}
-
-	// Cek apakah ada data yang >= 30% dalam 30 menit terakhir
-	var aboveCount int64
-	config.DB.Model(&models.SensorData{}).
-		Where("timestamp >= ? AND soil_moisture >= 30", thirtyMinAgo).
-		Count(&aboveCount)
-
-	if aboveCount > 0 {
-		log.Printf("AUTO-HARVEST: Masih ada %d data dengan soil >= 30%% dalam 30 menit terakhir. Belum stabil.", aboveCount)
-		return
-	}
-
-	// Semua data dalam 30 menit terakhir konsisten < 30%!
-	log.Printf("AUTO-HARVEST: Batch #%d - Soil < 30%% konstan selama 30 menit! Memulai panen otomatis.", batch.BatchID)
-
-	// Matikan semua aktuator
-	publishControl(client, topic, "fan_off")
-	publishControl(client, topic, "mist_off")
-	publishControl(client, topic, "bulb_off")
-
-	// Complete the batch
-	now := time.Now()
-	config.DB.Model(&models.BatchProduksi{}).Where("batch_id = ?", batch.BatchID).Updates(map[string]interface{}{
-		"status_batch":  "completed",
-		"end_timestamp": &now,
-	})
-	config.DB.Model(&models.ProductionHistory{}).Where("batch_id = ? AND end_time IS NULL", batch.BatchID).Updates(map[string]interface{}{
-		"end_time": &now,
-		"status":   "Matang Sempurna (otomatis)",
-	})
-
-	log.Printf("AUTO-HARVEST: Batch #%d '%s' berhasil di-harvest otomatis!", batch.BatchID, batch.NamaBatch)
-
-	// Send FCM notification
-	go SendHarvestNotification(batch.NamaBatch)
 }
 
 // publishControl publishes a control command to MQTT.
