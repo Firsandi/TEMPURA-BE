@@ -50,15 +50,15 @@ func GetDashboardData(c *gin.Context) {
 	currentPhase := "awal"
 	if latestData.SoilMoisture > 0 || latestData.SensorDataID != 0 {
 		soil := latestData.SoilMoisture
-		if soil >= 80 {
-			fermentationStatus = "Fase Awal"
-			currentPhase = "awal"
+		if soil >= 70 {
+			fermentationStatus = "Fase Matang"
+			currentPhase = "matang"
 		} else if soil >= 30 {
 			fermentationStatus = "Fase Aktif"
 			currentPhase = "aktif"
 		} else {
-			fermentationStatus = "Fase Matang"
-			currentPhase = "matang"
+			fermentationStatus = "Fase Awal"
+			currentPhase = "awal"
 		}
 	}
 	if latestData.SensorDataID == 0 {
