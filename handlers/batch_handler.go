@@ -19,9 +19,27 @@ func GetBatches(c *gin.Context) {
 		return
 	}
 
+	// Build response with active_start_time for active batches
+	type BatchResponse struct {
+		models.BatchProduksi
+		ActiveStartTime *time.Time `json:"active_start_time"`
+	}
+
+	var response []BatchResponse
+	for _, batch := range batches {
+		br := BatchResponse{BatchProduksi: batch}
+		if batch.StatusBatch == "active" {
+			var history models.ProductionHistory
+			if err := config.DB.Where("batch_id = ? AND end_time IS NULL", batch.BatchID).First(&history).Error; err == nil {
+				br.ActiveStartTime = &history.StartTime
+			}
+		}
+		response = append(response, br)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
-		"data":   batches,
+		"data":   response,
 	})
 }
 

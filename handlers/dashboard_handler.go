@@ -81,7 +81,7 @@ func GetDashboardData(c *gin.Context) {
 	// 8. Get system settings for UI display
 	var settings models.SystemSetting
 	if err := config.DB.First(&settings).Error; err != nil {
-		settings = models.SystemSetting{Mode: "manual", TargetTemp: 30.0, MaxTemp: 37.0, MinHumidity: 60.0, MaxHumidity: 70.0, TargetMoisture: 30}
+		settings = models.SystemSetting{Mode: "manual", TargetTemp: 25.0, MaxTemp: 35.0, MinHumidity: 60.0, MaxHumidity: 80.0, TargetMoisture: 30}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -136,10 +136,10 @@ func GetSettings(c *gin.Context) {
 		// Create default if not exists
 		settings = models.SystemSetting{
 			Mode:           "manual",
-			TargetTemp:     30.0,
-			MaxTemp:        37.0,
+			TargetTemp:     25.0,
+			MaxTemp:        35.0,
 			MinHumidity:    60.0,
-			MaxHumidity:    70.0,
+			MaxHumidity:    80.0,
 			TargetMoisture: 30,
 		}
 		config.DB.Create(&settings)

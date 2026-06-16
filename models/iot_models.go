@@ -65,10 +65,10 @@ type DeviceControlLog struct {
 type SystemSetting struct {
 	ID             uint      `gorm:"primaryKey" json:"id"`
 	Mode           string    `gorm:"default:manual" json:"mode"` // manual, auto
-	TargetTemp     float64   `gorm:"default:30.0" json:"target_temp"`       // Batas bawah suhu optimal (°C)
-	MaxTemp        float64   `gorm:"default:37.0" json:"max_temp"`          // Batas atas suhu optimal (°C)
+	TargetTemp     float64   `gorm:"default:25.0" json:"target_temp"`       // Batas bawah suhu optimal (°C)
+	MaxTemp        float64   `gorm:"default:35.0" json:"max_temp"`          // Batas atas suhu optimal (°C)
 	MinHumidity    float64   `gorm:"default:60.0" json:"min_humidity"`      // Batas bawah kelembaban (%)
-	MaxHumidity    float64   `gorm:"default:70.0" json:"max_humidity"`      // Batas atas kelembaban (%)
+	MaxHumidity    float64   `gorm:"default:80.0" json:"max_humidity"`      // Batas atas kelembaban (%)
 	TargetMoisture int       `gorm:"default:30" json:"target_moisture"`     // Threshold soil moisture (%)
 	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

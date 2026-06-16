@@ -122,7 +122,11 @@ func handleSensorData(client mqtt.Client, msg mqtt.Message) {
 }
 
 // runAutoControl executes automatic actuator control based on temperature and humidity.
-// Soil moisture is only used for maturity display and auto-harvest detection.
+// Logika kontrol fungsi ganda:
+//   - Lampu: pemanas (suhu rendah) + pengusir lembab (kelembaban tinggi)
+//   - Kipas: pendingin (suhu tinggi) + pengusir lembab (kelembaban tinggi)
+//   - Mist Maker: penambah kelembaban (kelembaban rendah)
+// Soil moisture hanya untuk deteksi kematangan (fail-safe auto-harvest).
 func runAutoControl(client mqtt.Client, payload SensorPayload, batch models.BatchProduksi) {
 	// Check if system is in auto mode
 	var settings models.SystemSetting
@@ -139,36 +143,45 @@ func runAutoControl(client mqtt.Client, payload SensorPayload, batch models.Batc
 
 	topic := "tempura/device/control"
 
-	// --- KONTROL SUHU (dari jurnal: optimal 30-37°C) ---
-	if payload.Temp < settings.TargetTemp {
-		// Suhu terlalu rendah → nyalakan lampu penghangat, matikan kipas
-		publishControl(client, topic, "bulb_on")
+	// --- FAIL-SAFE: Tempe matang (soil < 30%) → matikan semua ---
+	if payload.Soil < settings.TargetMoisture {
 		publishControl(client, topic, "fan_off")
-		log.Printf("AUTO-CONTROL: Suhu %.1f°C < %.1f°C → Lampu ON, Kipas OFF", payload.Temp, settings.TargetTemp)
-	} else if payload.Temp > settings.MaxTemp {
-		// Suhu terlalu tinggi → nyalakan kipas pendingin, matikan lampu
-		publishControl(client, topic, "fan_on")
-		publishControl(client, topic, "bulb_off")
-		log.Printf("AUTO-CONTROL: Suhu %.1f°C > %.1f°C → Kipas ON, Lampu OFF", payload.Temp, settings.MaxTemp)
-	} else {
-		// Suhu optimal (30-37°C) → matikan keduanya
-		publishControl(client, topic, "fan_off")
-		publishControl(client, topic, "bulb_off")
-		log.Printf("AUTO-CONTROL: Suhu %.1f°C optimal → Kipas OFF, Lampu OFF", payload.Temp)
-	}
-
-	// --- KONTROL KELEMBABAN (dari jurnal: optimal 60-70% RH) ---
-	if payload.Hum < settings.MinHumidity {
-		// Kelembaban terlalu rendah → nyalakan mist maker
-		publishControl(client, topic, "mist_on")
-		log.Printf("AUTO-CONTROL: Kelembaban %.1f%% < %.1f%% → Mist Maker ON", payload.Hum, settings.MinHumidity)
-	} else if payload.Hum >= settings.MinHumidity {
-		// Kelembaban cukup → matikan mist maker
 		publishControl(client, topic, "mist_off")
-		log.Printf("AUTO-CONTROL: Kelembaban %.1f%% >= %.1f%% → Mist Maker OFF", payload.Hum, settings.MinHumidity)
+		publishControl(client, topic, "bulb_off")
+		log.Printf("AUTO-CONTROL FAIL-SAFE: Soil %d%% < %d%% → Semua alat OFF (tempe matang)", payload.Soil, settings.TargetMoisture)
+		// Cek auto-harvest
+		checkAutoHarvest(client, payload, batch, topic)
+		return
 	}
 
-	// --- AUTO-HARVEST: Soil < 30% konstan selama 30 menit ---
+	// --- KONTROL LAMPU (Fungsi Ganda: nyala jika dingin ATAU terlalu lembab) ---
+	if payload.Temp < settings.TargetTemp || payload.Hum > settings.MaxHumidity {
+		publishControl(client, topic, "bulb_on")
+		log.Printf("AUTO-CONTROL: Lampu ON (Suhu %.1f°C < %.1f°C atau Kelembaban %.1f%% > %.1f%%)", payload.Temp, settings.TargetTemp, payload.Hum, settings.MaxHumidity)
+	} else {
+		publishControl(client, topic, "bulb_off")
+		log.Printf("AUTO-CONTROL: Lampu OFF (kondisi aman)")
+	}
+
+	// --- KONTROL KIPAS (Fungsi Ganda: nyala jika kepanasan ATAU terlalu lembab) ---
+	if payload.Temp > settings.MaxTemp || payload.Hum > settings.MaxHumidity {
+		publishControl(client, topic, "fan_on")
+		log.Printf("AUTO-CONTROL: Kipas ON (Suhu %.1f°C > %.1f°C atau Kelembaban %.1f%% > %.1f%%)", payload.Temp, settings.MaxTemp, payload.Hum, settings.MaxHumidity)
+	} else {
+		publishControl(client, topic, "fan_off")
+		log.Printf("AUTO-CONTROL: Kipas OFF (kondisi aman)")
+	}
+
+	// --- KONTROL MIST MAKER (Hanya nyala jika ruangan terlalu kering) ---
+	if payload.Hum < settings.MinHumidity {
+		publishControl(client, topic, "mist_on")
+		log.Printf("AUTO-CONTROL: Mist Maker ON (Kelembaban %.1f%% < %.1f%%)", payload.Hum, settings.MinHumidity)
+	} else {
+		publishControl(client, topic, "mist_off")
+		log.Printf("AUTO-CONTROL: Mist Maker OFF (kelembaban cukup)")
+	}
+
+	// --- AUTO-HARVEST: Soil < threshold konstan selama 30 menit ---
 	checkAutoHarvest(client, payload, batch, topic)
 }
 
