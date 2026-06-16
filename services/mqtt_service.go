@@ -30,14 +30,16 @@ type SensorPayload struct {
 
 func RegisterMQTTCallback() {
 	config.OnConnectCallback = func(c mqtt.Client) {
-		topic := "tempura/sensor/data"
-		token := c.Subscribe(topic, 1, handleSensorData)
-		token.Wait()
-		if token.Error() != nil {
-			log.Printf("Gagal subscribe ke topik %s: %v", topic, token.Error())
-		} else {
-			fmt.Printf("Berhasil subscribe ke topik: %s\n", topic)
-		}
+		go func() {
+			topic := "tempura/sensor/data"
+			token := c.Subscribe(topic, 1, handleSensorData)
+			token.Wait()
+			if token.Error() != nil {
+				log.Printf("Gagal subscribe ke topik %s: %v", topic, token.Error())
+			} else {
+				fmt.Printf("Berhasil subscribe ke topik: %s\n", topic)
+			}
+		}()
 	}
 }
 
