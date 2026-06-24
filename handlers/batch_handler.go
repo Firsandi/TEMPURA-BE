@@ -103,6 +103,22 @@ func StartBatch(c *gin.Context) {
 		"end_timestamp": nil,
 	})
 
+	// 6. Send "batch started" notification
+	go func() {
+		userName := "Pengguna"
+		if startedBy != nil {
+			var u models.User
+			if config.DB.First(&u, *startedBy).Error == nil {
+				userName = u.Fullname
+			}
+		}
+		services.SendAlertNotification(
+			"🚀 Batch Dijalankan",
+			fmt.Sprintf("Batch '%s' telah dijalankan oleh %s.", batch.NamaBatch, userName),
+			"batch_started",
+		)
+	}()
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Batch berhasil dijalankan",
@@ -171,23 +187,40 @@ func DeleteBatch(c *gin.Context) {
 
 
 
-// StopBatch marks a batch as completed (Manual)
+// StopBatch marks a batch as completed (Manual force stop - NO harvest notification)
 func StopBatch(c *gin.Context) {
 	id := c.Param("id")
-	
+
 	userIDStr := c.Query("user_id")
 	var stoppedBy *uint
+	var userName string = "Pengguna"
 	if userIDStr != "" {
 		if idInt, err := strconv.Atoi(userIDStr); err == nil {
 			uid := uint(idInt)
 			stoppedBy = &uid
+			var u models.User
+			if config.DB.First(&u, uid).Error == nil {
+				userName = u.Fullname
+			}
 		}
 	}
 
-	if err := CompleteBatch(id, "Fermentasi Dihentikan (dihentikan paksa)", stoppedBy); err != nil {
+	// Ambil nama batch sebelum di-complete
+	var batch models.BatchProduksi
+	config.DB.First(&batch, id)
+
+	// false = jangan kirim notif panen (ini stop paksa, bukan panen normal)
+	if err := CompleteBatch(id, "Fermentasi Dihentikan (dihentikan paksa)", stoppedBy, false); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Kirim notif "batch dihentikan"
+	go services.SendAlertNotification(
+		"🛑 Batch Dihentikan",
+		fmt.Sprintf("Batch '%s' telah dihentikan oleh %s.", batch.NamaBatch, userName),
+		"batch_stopped",
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
@@ -195,14 +228,17 @@ func StopBatch(c *gin.Context) {
 	})
 }
 
-// CompleteBatch is a helper to finalize a batch session
-func CompleteBatch(batchID interface{}, status string, stoppedBy *uint) error {
+// CompleteBatch is a helper to finalize a batch session.
+// sendHarvestNotif: true hanya untuk auto-complete (soil >= 85%), false untuk stop paksa.
+func CompleteBatch(batchID interface{}, status string, stoppedBy *uint, sendHarvestNotif bool) error {
 	now := time.Now()
-	
-	// Get batch name before completing to send notification
-	var batch models.BatchProduksi
-	if err := config.DB.First(&batch, batchID).Error; err == nil {
-		go services.SendHarvestNotification(batch.NamaBatch)
+
+	// Kirim notif panen HANYA jika ini auto-complete, bukan stop paksa
+	if sendHarvestNotif {
+		var batch models.BatchProduksi
+		if err := config.DB.First(&batch, batchID).Error; err == nil {
+			go services.SendHarvestNotification(batch.NamaBatch)
+		}
 	}
 
 	// 1. Update Batch status and end_timestamp

@@ -12,9 +12,10 @@ import (
 )
 
 var (
-	lastTempAlertTime time.Time
-	lastHumAlertTime  time.Time
-	alertCooldown     = 30 * time.Minute
+	lastTempAlertTime    time.Time
+	lastHumAlertTime     time.Time
+	lastOfflineAlertTime time.Time
+	alertCooldown        = 30 * time.Minute
 )
 
 type SensorPayload struct {
@@ -41,6 +42,9 @@ func RegisterMQTTCallback() {
 			}
 		}()
 	}
+
+	// Start background goroutine to detect IoT offline during active batch
+	go watchIoTOffline()
 }
 
 func handleSensorData(client mqtt.Client, msg mqtt.Message) {
@@ -109,7 +113,7 @@ func handleSensorData(client mqtt.Client, msg mqtt.Message) {
 			})
 		fmt.Printf("Batch #%d completed automatically (Soil Moisture: %d%% >= 85%%)\n", *batchID, payload.Soil)
 
-		// Send Push Notification
+		// true = kirim notif panen (ini auto-complete yang sah, bukan stop paksa)
 		go SendHarvestNotification(batch.NamaBatch)
 
 		// Turn off all actuators
@@ -121,7 +125,6 @@ func handleSensorData(client mqtt.Client, msg mqtt.Message) {
 		// Set batchID to nil so auto-control doesn't run for this reading
 		batchID = nil
 	}
-
 
 	// 2.5 Check Alerts
 	var settings models.SystemSetting
@@ -218,4 +221,40 @@ func publishControl(client mqtt.Client, topic, command string) {
 			log.Printf("Timeout publishing control command '%s' to MQTT", command)
 		}
 	}()
+}
+
+// watchIoTOffline runs as a background goroutine.
+// Setiap 1 menit, cek apakah sensor mati saat batch sedang aktif.
+// Menggunakan timestamp DB agar tetap akurat walau backend restart.
+func watchIoTOffline() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// Cek apakah ada batch aktif
+		var activeBatch models.BatchProduksi
+		if err := config.DB.Where("status_batch = ? AND is_deleted = false", "active").First(&activeBatch).Error; err != nil {
+			continue // Tidak ada batch aktif
+		}
+
+		// Cek timestamp sensor terbaru dari DB (lebih reliable dari variabel in-memory)
+		var latest models.SensorData
+		if err := config.DB.Order("timestamp desc").First(&latest).Error; err != nil {
+			continue // Belum ada data sensor sama sekali
+		}
+
+		// Jika sensor tidak mengirim data > 2 menit → offline
+		if time.Since(latest.Timestamp) > 2*time.Minute {
+			now := time.Now()
+			if now.Sub(lastOfflineAlertTime) > alertCooldown {
+				log.Printf("PERINGATAN: IoT offline saat batch '%s' sedang berjalan!", activeBatch.NamaBatch)
+				go SendAlertNotification(
+					"⚠️ Perangkat IoT Offline!",
+					fmt.Sprintf("Sensor tidak terdeteksi selama lebih dari 2 menit. Batch '%s' sedang berjalan. Segera periksa perangkat.", activeBatch.NamaBatch),
+					"iot_offline",
+				)
+				lastOfflineAlertTime = now
+			}
+		}
+	}
 }
