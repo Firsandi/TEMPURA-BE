@@ -229,7 +229,7 @@ func StopBatch(c *gin.Context) {
 }
 
 // CompleteBatch is a helper to finalize a batch session.
-// sendHarvestNotif: true hanya untuk auto-complete (soil >= 85%), false untuk stop paksa.
+// sendHarvestNotif: true hanya untuk auto-complete (soil >= 75%), false untuk stop paksa.
 func CompleteBatch(batchID interface{}, status string, stoppedBy *uint, sendHarvestNotif bool) error {
 	now := time.Now()
 

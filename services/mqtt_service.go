@@ -96,8 +96,8 @@ func handleSensorData(client mqtt.Client, msg mqtt.Message) {
 		}
 	}
 
-	// 2.3 Auto-complete batch if soil moisture >= 85%
-	if batchID != nil && payload.Soil >= 85 {
+	// 2.3 Auto-complete batch if soil moisture >= 75%
+	if batchID != nil && payload.Soil >= 75 {
 		now := time.Now()
 		// 1. Update Batch status and end_timestamp
 		config.DB.Model(&models.BatchProduksi{}).Where("batch_id = ?", *batchID).Updates(map[string]interface{}{
@@ -111,7 +111,7 @@ func handleSensorData(client mqtt.Client, msg mqtt.Message) {
 				"end_time": &now,
 				"status":   "Matang Sempurna (otomatis)",
 			})
-		fmt.Printf("Batch #%d completed automatically (Soil Moisture: %d%% >= 85%%)\n", *batchID, payload.Soil)
+		fmt.Printf("Batch #%d completed automatically (Soil Moisture: %d%% >= 75%%)\n", *batchID, payload.Soil)
 
 		// true = kirim notif panen (ini auto-complete yang sah, bukan stop paksa)
 		go SendHarvestNotification(batch.NamaBatch)
